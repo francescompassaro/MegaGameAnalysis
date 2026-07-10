@@ -127,7 +127,7 @@ def carica_dati(tabella):
     df = pd.read_sql_query(f"SELECT * FROM {tabella}", conn)
     conn.close()
     
-    # Protezione contro i valori nulli: se link_deck contiene dei NaN, li trasforma in stringhe vuote
+    # Protezione contro i valori nulli
     if tabella == "risultati" and "link_deck" in df.columns:
         df["link_deck"] = df["link_deck"].fillna("").astype(str)
         
@@ -206,7 +206,6 @@ if menu == "Dashboard Pubblica":
             df_meta_glob = df_risultati.groupby("mazzo").size().reset_index(name="Presenze")
             fig_pie_glob = px.pie(df_meta_glob, names="mazzo", values="Presenze", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
             fig_pie_glob.update_layout(legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), height=350, margin=dict(t=10, b=10, l=10, r=10))
-            # Corretto st.plotly_chart col nuovo parametro width standard
             st.plotly_chart(fig_pie_glob, width="stretch")
             
         st.markdown("---")
@@ -243,7 +242,6 @@ if menu == "Dashboard Pubblica":
             df_meta_tappa = df_tappa.groupby("mazzo").size().reset_index(name="Presenze")
             fig_pie_tappa = px.pie(df_meta_tappa, names="mazzo", values="Presenze", hole=0.4, color_discrete_sequence=px.colors.qualitative.Safe)
             fig_pie_tappa.update_layout(legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), height=350, margin=dict(t=10, b=10, l=10, r=10))
-            # Corretto st.plotly_chart col nuovo parametro width standard
             st.plotly_chart(fig_pie_tappa, width="stretch")
             
         st.markdown("---")
@@ -491,9 +489,9 @@ elif menu == "📝 Inserisci Nuovi Dati":
                             cursor = conn.cursor()
                             cursor.execute("DELETE FROM mazzi WHERE id = ?", (int(row['id']),))
                             conn.commit()
-                            conn.close()
-                            st.success(f"Mazzo '{row['nome']}' rimosso!")
-                            st.rerun()
+                    conn.close()
+                    st.success(f"Mazzo '{row['nome']}' rimosso!")
+                    st.rerun()
 
     # --- GESTIONE FILES (BACKUP & RIPRISTINO) ---
     st.markdown("---")
@@ -504,7 +502,7 @@ elif menu == "📝 Inserisci Nuovi Dati":
         try:
             with open(DB_FILE, "rb") as file:
                 db_bytes = file.read()
-            st.download_button(label="Scarica Database (.db) 📥", data=db_bytes, file_name="lega_pauper_backup.db", mime="application/x-sqlite3")
+            st.download_button(label="Scarica Database (.db) 📥", data=db_bytes, file_name="lega_pauper_backup.db", mime="application/x-sqlite3", width="stretch")
         except FileNotFoundError:
             st.error("Il file del database non esiste ancora.")
     with col_back2:
@@ -512,7 +510,7 @@ elif menu == "📝 Inserisci Nuovi Dati":
         st.write("Carica un file di backup per sovrascrivere i dati correnti.")
         uploaded_db = st.file_uploader("Scegli un file .db", type=["db"])
         if uploaded_db is not None:
-            if st.button("Conferma e Sovrascrivi ⚠️", type="primary"):
+            if st.button("Conferma e Sovrascrivi ⚠️", type="primary", width="stretch"):
                 try:
                     with open(DB_FILE, "wb") as f:
                         f.write(uploaded_db.read())
