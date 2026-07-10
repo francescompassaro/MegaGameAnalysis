@@ -126,6 +126,11 @@ def carica_dati(tabella):
     conn = sqlite3.connect(DB_FILE)
     df = pd.read_sql_query(f"SELECT * FROM {tabella}", conn)
     conn.close()
+    
+    # Protezione contro i valori nulli: se link_deck contiene dei NaN, li trasforma in stringhe vuote
+    if tabella == "risultati" and "link_deck" in df.columns:
+        df["link_deck"] = df["link_deck"].fillna("").astype(str)
+        
     return df
 
 init_db()
@@ -194,7 +199,7 @@ if menu == "Dashboard Pubblica":
             st.subheader("📋 Classifica Generale Completa")
             df_classifica_vis = df_classifica_totale[['Pos', 'giocatore', 'punteggio']].rename(columns={'giocatore': 'Giocatore', 'punteggio': 'Punti Totali'})
             df_classifica_filtrata = filter_dataframe(df_classifica_vis, key="generale")
-            st.dataframe(df_classifica_filtrata, use_container_width=True, hide_index=True, height=380)
+            st.dataframe(df_classifica_filtrata, width="stretch", hide_index=True, height=380)
             
         with col_glob2:
             st.subheader("🍩 Metashare Globale (Mazzi Giocati)")
@@ -230,7 +235,7 @@ if menu == "Dashboard Pubblica":
             st.subheader(f"📊 Classifica Ordinata - Tappa {tappa_scelta}")
             df_tappa_vis = df_tappa[['Pos Tappa', 'giocatore', 'mazzo', 'punteggio']].rename(columns={'giocatore': 'Giocatore', 'mazzo': 'Mazzo', 'punteggio': 'Punti Tappa'})
             df_tappa_filtrata = filter_dataframe(df_tappa_vis, key="tappa")
-            st.dataframe(df_tappa_filtrata, use_container_width=True, hide_index=True, height=350)
+            st.dataframe(df_tappa_filtrata, width="stretch", hide_index=True, height=350)
             
         with col_tappa2:
             st.subheader(f"🍩 Metashare - Tappa {tappa_scelta}")
@@ -245,9 +250,9 @@ if menu == "Dashboard Pubblica":
         df_visualizzazione = df_risultati[['tappa', 'negozio', 'giocatore', 'mazzo', 'vittorie', 'sconfitte', 'pareggi', 'punteggio']].copy()
         df_visualizzazione.columns = ['Tappa', 'Negozio', 'Giocatore', 'Mazzo Giocato', 'W', 'L', 'D', 'Punti']
         df_registro_filtrato = filter_dataframe(df_visualizzazione, key="storico")
-        st.dataframe(df_registro_filtrato, use_container_width=True, hide_index=True)
+        st.dataframe(df_registro_filtrato, width="stretch", hide_index=True)
 
-# --- 5. PAGINA: LISTE PER TAPPA (AGGIORNATA) ---
+# --- 5. PAGINA: LISTE PER TAPPA ---
 elif menu == "🃏 Liste per Tappa":
     st.title("🃏 Archivio Liste Mazzi divisi per Tappa")
     st.write("Usa i selettori per scegliere l'evento e visualizzare tutti i mazzi che hanno preso parte alla tappa.")
@@ -256,7 +261,6 @@ elif menu == "🃏 Liste per Tappa":
         st.info("Nessun dato presente nel database. Inserisci prima qualche risultato.")
     else:
         st.markdown("---")
-        # Selettori per navigare l'evento
         col_p_sel1, col_p_sel2, col_p_sel3 = st.columns(3)
         with col_p_sel1:
             anni_liste = sorted(df_risultati["anno"].unique(), reverse=True)
@@ -270,7 +274,6 @@ elif menu == "🃏 Liste per Tappa":
             tappe_liste = sorted(df_l_season["tappa"].unique())
             tappa_l_scelta = st.selectbox("Numero Tappa:", tappe_liste, index=len(tappe_liste)-1 if tappe_liste else 0, key="tappa_liste_page")
             
-        # Estraiamo i dati di quella tappa ordinati per punteggio decrescente
         df_evento_scelto = df_risultati[
             (df_risultati["anno"] == anno_l_scelto) & 
             (df_risultati["season"] == season_l_scelta) & 
@@ -282,7 +285,6 @@ elif menu == "🃏 Liste per Tappa":
         else:
             st.subheader(f"📊 Elenco Mazzi e Link - Tappa {tappa_l_scelta} [{season_l_scelta} ({anno_l_scelto})]")
             
-            # Costruiamo una tabella riga per riga
             h_l1, h_l2, h_l3, h_l4 = st.columns([1, 3, 3, 2])
             h_l1.markdown("**Pos**")
             h_l2.markdown("**Giocatore**")
@@ -296,9 +298,9 @@ elif menu == "🃏 Liste per Tappa":
                 r_l2.write(row["giocatore"])
                 r_l3.write(row["mazzo"])
                 
-                # Controllo sul link: se c'è mostra il bottone, altrimenti una scritta
-                if row["link_deck"].strip() != "":
-                    r_l4.link_button("Vedi Lista 🌐", row["link_deck"], use_container_width=True, type="secondary")
+                # Resiste perfettamente sia alle stringhe vuote sia ad eventuali spazi spuri
+                if str(row["link_deck"]).strip() != "":
+                    r_l4.link_button("Vedi Lista 🌐", row["link_deck"], width="stretch", type="secondary")
                 else:
                     r_l4.write("*Nessuna lista caricata*")
                 st.markdown("<hr style='margin: 8px 0px; border-color: #f0f2f6;'>", unsafe_allow_html=True)
