@@ -22,6 +22,7 @@ def filter_dataframe(df: pd.DataFrame, key: str = "default") -> pd.DataFrame:
     
     for column in to_filter_columns:
         left, right = st.columns((1, 3))
+        # Per campi di testo (Giocatore, Mazzo...)
         if is_object_dtype(df[column]):
             user_text_input = right.text_input(
                 f"Cerca nel testo di '{column}':",
@@ -29,6 +30,7 @@ def filter_dataframe(df: pd.DataFrame, key: str = "default") -> pd.DataFrame:
             )
             if user_text_input:
                 df = df[df[column].astype(str).str.contains(user_text_input, case=False)]
+        # Per numeri (Punti, Tappa, W, L, D...)
         elif is_numeric_dtype(df[column]):
             min_val = int(df[column].min()) if not df[column].empty else 0
             max_val = int(df[column].max()) if not df[column].empty else 0
@@ -51,7 +53,7 @@ st.set_page_config(page_title="Lega Pauper Capua", layout="wide", page_icon="�
 DB_FILE = "lega_pauper.db"
 PASSWORD_ADMIN = "pauper2026"  # La tua password per inserire i dati
 
-# 2. INIZIALIZZAZIONE DATABASE
+# 2. INIZIALIZZAZIONE DATABASE (Con tabelle di supporto per Giocatori e Mazzi)
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -71,13 +73,6 @@ def init_db():
             punteggio INTEGER
         )
     """)
-    
-    # Migrazione dinamica: aggiunge la colonna link_deck se non esiste nel DB precedente
-    cursor.execute("PRAGMA table_info(risultati)")
-    colonne = [col[1] for col in cursor.fetchall()]
-    if "link_deck" not in colonne:
-        cursor.execute("ALTER TABLE risultati ADD COLUMN link_deck TEXT DEFAULT ''")
-        
     # Tabella Giocatori Anagrafica
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS giocatori (
@@ -112,13 +107,13 @@ def init_db():
     conn.commit()
     conn.close()
 
-def inserisci_risultato(anno, season, tappa, negozio, giocatore, mazzo, v, s, p, punti, link_deck):
+def inserisci_risultato(anno, season, tappa, negozio, giocatore, mazzo, v, s, p, punti):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO risultati (anno, season, tappa, negozio, giocatore, mazzo, vittorie, sconfitte, pareggi, punteggio, link_deck)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (anno, season, tappa, negozio, giocatore, mazzo, v, s, p, punti, link_deck))
+        INSERT INTO risultati (anno, season, tappa, negozio, giocatore, mazzo, vittorie, sconfitte, pareggi, punteggio)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (anno, season, tappa, negozio, giocatore, mazzo, v, s, p, punti))
     conn.commit()
     conn.close()
 
@@ -126,11 +121,6 @@ def carica_dati(tabella):
     conn = sqlite3.connect(DB_FILE)
     df = pd.read_sql_query(f"SELECT * FROM {tabella}", conn)
     conn.close()
-    
-    # Protezione contro i valori nulli
-    if tabella == "risultati" and "link_deck" in df.columns:
-        df["link_deck"] = df["link_deck"].fillna("").astype(str)
-        
     return df
 
 init_db()
@@ -159,8 +149,7 @@ else:
         st.session_state["logged_in"] = False
         st.rerun()
 
-# AGGIUNTA PAGINA "Liste per Tappa" AL MENU
-opzioni_menu = ["Dashboard Pubblica", "🃏 Liste per Tappa"]
+opzioni_menu = ["Dashboard Pubblica"]
 if st.session_state["logged_in"]:
     opzioni_menu.append("📝 Inserisci Nuovi Dati")
 
@@ -180,9 +169,10 @@ if menu == "Dashboard Pubblica":
         df_classifica_totale.index.name = "Pos"
         df_classifica_totale = df_classifica_totale.reset_index()
 
-        # --- SEZIONE PODIO ---
+        # --- SEZIONE PODIO (METRICS) ---
         st.subheader("🥇 Il Podio Attuale")
         col_p1, col_p2, col_p3 = st.columns(3)
+        
         if len(df_classifica_totale) >= 1:
             col_p1.metric(label="1° Posto 🥇", value=df_classifica_totale.iloc[0]["giocatore"], delta=f"{int(df_classifica_totale.iloc[0]['punteggio'])} PT")
         if len(df_classifica_totale) >= 2:
@@ -192,119 +182,109 @@ if menu == "Dashboard Pubblica":
             
         st.markdown("---")
 
-        # --- CLASSIFICA GENERALE VS METASHARE GLOBALE ---
+        # --- RIGA 1: CLASSIFICA GENERALE VS METASHARE GLOBALE ---
         st.header("🌐 Panoramica Generale")
         col_glob1, col_glob2 = st.columns([4, 3])
+        
         with col_glob1:
             st.subheader("📋 Classifica Generale Completa")
             df_classifica_vis = df_classifica_totale[['Pos', 'giocatore', 'punteggio']].rename(columns={'giocatore': 'Giocatore', 'punteggio': 'Punti Totali'})
+            
             df_classifica_filtrata = filter_dataframe(df_classifica_vis, key="generale")
-            st.dataframe(df_classifica_filtrata, width="stretch", hide_index=True, height=380)
+            st.dataframe(df_classifica_filtrata, use_container_width=True, hide_index=True, height=380)
             
         with col_glob2:
             st.subheader("🍩 Metashare Globale (Mazzi Giocati)")
             df_meta_glob = df_risultati.groupby("mazzo").size().reset_index(name="Presenze")
-            fig_pie_glob = px.pie(df_meta_glob, names="mazzo", values="Presenze", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-            fig_pie_glob.update_layout(legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), height=350, margin=dict(t=10, b=10, l=10, r=10))
-            st.plotly_chart(fig_pie_glob, width="stretch")
+            fig_pie_glob = px.pie(
+                df_meta_glob, 
+                names="mazzo", 
+                values="Presenze", 
+                hole=0.4,
+                color_discrete_sequence=px.colors.qualitative.Pastel
+            )
+            fig_pie_glob.update_layout(
+                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+                height=350,
+                margin=dict(t=10, b=10, l=10, r=10)
+            )
+            st.plotly_chart(fig_pie_glob, use_container_width=True)
             
         st.markdown("---")
         
-        # --- SELETTORE A CASCATA TAPPA ---
+        # --- SELETTORE A CASCATA: ANNO -> SEASON -> TAPPA ---
         st.header("🎯 Dettaglio Singola Tappa")
         col_sel1, col_sel2, col_sel3 = st.columns(3)
+        
         with col_sel1:
             anni_disponibili = sorted(df_risultati["anno"].unique(), reverse=True)
             anno_scelto = st.selectbox("Seleziona Anno:", anni_disponibili, index=0)
             df_filtrato_anno = df_risultati[df_risultati["anno"] == anno_scelto]
+
         with col_sel2:
             season_disponibili = sorted(df_filtrato_anno["season"].unique())
             season_scelta = st.selectbox("Seleziona Season:", season_disponibili, index=0)
             df_filtrato_season = df_filtrato_anno[df_filtrato_anno["season"] == season_scelta]
+
         with col_sel3:
             tappe_disponibili = sorted(df_filtrato_season["tappa"].unique())
-            tappa_scelta = st.selectbox("Seleziona Tappa:", tappe_disponibili, index=len(tappe_disponibili)-1 if tappe_disponibili else 0)
+            tappa_scelta = st.selectbox(
+                "Seleziona Tappa:", 
+                tappe_disponibili, 
+                index=len(tappe_disponibili)-1 if tappe_disponibili else 0
+            )
         
-        df_tappa = df_risultati[(df_risultati["anno"] == anno_scelto) & (df_risultati["season"] == season_scelta) & (df_risultati["tappa"] == tappa_scelta)].sort_values(by="punteggio", ascending=False).reset_index(drop=True)
+        # Filtro finale dei dati
+        df_tappa = df_risultati[
+            (df_risultati["anno"] == anno_scelto) & 
+            (df_risultati["season"] == season_scelta) & 
+            (df_risultati["tappa"] == tappa_scelta)
+        ].sort_values(by="punteggio", ascending=False).reset_index(drop=True)
+        
         df_tappa.index += 1
         df_tappa.index.name = "Pos Tappa"
         df_tappa = df_tappa.reset_index()
 
+        # --- RIGA 2: CLASSIFICA TAPPA VS METASHARE TAPPA ---
         col_tappa1, col_tappa2 = st.columns([4, 3])
+        
         with col_tappa1:
             st.subheader(f"📊 Classifica Ordinata - Tappa {tappa_scelta}")
-            df_tappa_vis = df_tappa[['Pos Tappa', 'giocatore', 'mazzo', 'punteggio']].rename(columns={'giocatore': 'Giocatore', 'mazzo': 'Mazzo', 'punteggio': 'Punti Tappa'})
+            df_tappa_vis = df_tappa[['Pos Tappa', 'giocatore', 'mazzo', 'punteggio']].rename(
+                columns={'giocatore': 'Giocatore', 'mazzo': 'Mazzo', 'punteggio': 'Punti Tappa'}
+            )
+            
             df_tappa_filtrata = filter_dataframe(df_tappa_vis, key="tappa")
-            st.dataframe(df_tappa_filtrata, width="stretch", hide_index=True, height=350)
+            st.dataframe(df_tappa_filtrata, use_container_width=True, hide_index=True, height=350)
             
         with col_tappa2:
             st.subheader(f"🍩 Metashare - Tappa {tappa_scelta}")
             df_meta_tappa = df_tappa.groupby("mazzo").size().reset_index(name="Presenze")
-            fig_pie_tappa = px.pie(df_meta_tappa, names="mazzo", values="Presenze", hole=0.4, color_discrete_sequence=px.colors.qualitative.Safe)
-            fig_pie_tappa.update_layout(legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), height=350, margin=dict(t=10, b=10, l=10, r=10))
-            st.plotly_chart(fig_pie_tappa, width="stretch")
+            fig_pie_tappa = px.pie(
+                df_meta_tappa, 
+                names="mazzo", 
+                values="Presenze", 
+                hole=0.4,
+                color_discrete_sequence=px.colors.qualitative.Safe
+            )
+            fig_pie_tappa.update_layout(
+                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+                height=350,
+                margin=dict(t=10, b=10, l=10, r=10)
+            )
+            st.plotly_chart(fig_pie_tappa, use_container_width=True)
             
         st.markdown("---")
         
+        # --- RIGA 3: TABELLA REGISTRO IN FONDO ---
         st.subheader("📋 Registro Storico di Tutti i Match Inseriti")
         df_visualizzazione = df_risultati[['tappa', 'negozio', 'giocatore', 'mazzo', 'vittorie', 'sconfitte', 'pareggi', 'punteggio']].copy()
         df_visualizzazione.columns = ['Tappa', 'Negozio', 'Giocatore', 'Mazzo Giocato', 'W', 'L', 'D', 'Punti']
-        df_registro_filtrato = filter_dataframe(df_visualizzazione, key="storico")
-        st.dataframe(df_registro_filtrato, width="stretch", hide_index=True)
-
-# --- 5. PAGINA: LISTE PER TAPPA ---
-elif menu == "🃏 Liste per Tappa":
-    st.title("🃏 Archivio Liste Mazzi divisi per Tappa")
-    st.write("Usa i selettori per scegliere l'evento e visualizzare tutti i mazzi che hanno preso parte alla tappa.")
-    
-    if df_risultati.empty:
-        st.info("Nessun dato presente nel database. Inserisci prima qualche risultato.")
-    else:
-        st.markdown("---")
-        col_p_sel1, col_p_sel2, col_p_sel3 = st.columns(3)
-        with col_p_sel1:
-            anni_liste = sorted(df_risultati["anno"].unique(), reverse=True)
-            anno_l_scelto = st.selectbox("Anno dell'evento:", anni_liste, index=0, key="anno_liste_page")
-            df_l_anno = df_risultati[df_risultati["anno"] == anno_l_scelto]
-        with col_p_sel2:
-            season_liste = sorted(df_l_anno["season"].unique())
-            season_l_scelta = st.selectbox("Season dell'evento:", season_liste, index=0, key="season_liste_page")
-            df_l_season = df_l_anno[df_l_anno["season"] == season_l_scelta]
-        with col_p_sel3:
-            tappe_liste = sorted(df_l_season["tappa"].unique())
-            tappa_l_scelta = st.selectbox("Numero Tappa:", tappe_liste, index=len(tappe_liste)-1 if tappe_liste else 0, key="tappa_liste_page")
-            
-        df_evento_scelto = df_risultati[
-            (df_risultati["anno"] == anno_l_scelto) & 
-            (df_risultati["season"] == season_l_scelta) & 
-            (df_risultati["tappa"] == tappa_l_scelta)
-        ].sort_values(by="punteggio", ascending=False).reset_index(drop=True)
         
-        if df_evento_scelto.empty:
-            st.warning("Nessun dato inserito per questa combinazione.")
-        else:
-            st.subheader(f"📊 Elenco Mazzi e Link - Tappa {tappa_l_scelta} [{season_l_scelta} ({anno_l_scelto})]")
-            
-            h_l1, h_l2, h_l3, h_l4 = st.columns([1, 3, 3, 2])
-            h_l1.markdown("**Pos**")
-            h_l2.markdown("**Giocatore**")
-            h_l3.markdown("**Mazzo/Archetipo**")
-            h_l4.markdown("**Lista Condivisa**")
-            st.markdown("<hr style='margin: 5px 0px; border-color: #333;'>", unsafe_allow_html=True)
-            
-            for index, row in df_evento_scelto.iterrows():
-                r_l1, r_l2, r_l3, r_l4 = st.columns([1, 3, 3, 2])
-                r_l1.write(f"**{index + 1}°**")
-                r_l2.write(row["giocatore"])
-                r_l3.write(row["mazzo"])
-                
-                if str(row["link_deck"]).strip() != "":
-                    r_l4.link_button("Vedi Lista 🌐", row["link_deck"], width="stretch", type="secondary")
-                else:
-                    r_l4.write("*Nessuna lista caricata*")
-                st.markdown("<hr style='margin: 8px 0px; border-color: #f0f2f6;'>", unsafe_allow_html=True)
+        df_registro_filtrato = filter_dataframe(df_visualizzazione, key="storico")
+        st.dataframe(df_registro_filtrato, use_container_width=True, hide_index=True)
 
-# --- 6. PAGINA: INSERIMENTO DATI (ADMIN) ---
+# --- 5. PAGINA: INSERIMENTO DATI (ADMIN) ---
 elif menu == "📝 Inserisci Nuovi Dati":
     st.title("📝 Pannello Amministratore")
     
@@ -319,6 +299,7 @@ elif menu == "📝 Inserisci Nuovi Dati":
         "📊 Inserisci Punti Tappa", "👥 Gestione Giocatori", "🃏 Gestione Mazzi/Archetipi"
     ])
     
+    # --- TAB 1: INSERIMENTO E TABELLA ELIMINAZIONE RISULTATI ---
     with tab_risultati:
         st.header("Match Risultati")
         ELENCO_NEGOZI = ["Magicomix"]
@@ -326,36 +307,42 @@ elif menu == "📝 Inserisci Nuovi Dati":
         if not lista_giocatori or not lista_mazzi:
             st.warning("⚠️ Per favore, inserisci almeno un giocatore e un mazzo nei Tab a fianco prima di registrare un match!")
         else:
+            # Corretto: rimosso l'ambiente st.form che creava il blocco, lasciando i widget reattivi
             col_f1, col_f2, col_f3 = st.columns(3)
+            
             with col_f1:
                 anno = st.selectbox("Anno della Season", [2026, 2027, 2025])
                 season = st.selectbox("Nome Season", ["Stagione 1", "Stagione 2", "Stagione 3", "Winter", "Spring", "Summer", "Autumn"])
                 tappa = st.number_input("Numero Tappa", min_value=1, max_value=50, value=1, step=1)
+                
             with col_f2:
                 negozio = st.selectbox("Negozio ospitante", ELENCO_NEGOZI)
                 giocatore = st.selectbox("Seleziona Giocatore", lista_giocatori)
                 mazzo = st.selectbox("Seleziona Archetipo", lista_mazzi)
+                
             with col_f3:
                 vittorie = st.number_input("Vittorie (W)", min_value=0, max_value=10, value=0, step=1)
                 sconfitte = st.number_input("Sconfitte (L)", min_value=0, max_value=10, value=0, step=1)
                 pareggi = st.number_input("Pareggi (D)", min_value=0, max_value=10, value=0, step=1)
                 
-            link_deck_input = st.text_input("🔗 Link della lista mazzo (MTGDecks / Moxfield / ecc.) - Opzionale", placeholder="https://mtgdecks.net/Pauper/...")
-            
             punti_totali = (vittorie * 3) + (pareggi * 1)
             st.markdown(f"**Calcolo Punteggio:** `{punti_totali} Punti` (3 per W, 1 per D)")
             
             if st.button("Salva nel Database 💾", key="save_match_btn"):
-                inserisci_risultato(anno, season, tappa, negozio, giocatore, mazzo, vittorie, sconfitte, pareggi, punti_totali, link_deck_input.strip())
+                inserisci_risultato(anno, season, tappa, negozio, giocatore, mazzo, vittorie, sconfitte, pareggi, punti_totali)
                 st.success(f"Dati inseriti con successo per {giocatore}!")
                 st.rerun()
                 
+        # GRIGLIA DI ELIMINAZIONE LIMITATA AGLI ULTIMI 2 RECORD
         st.markdown("---")
         st.subheader("🗑️ Tabella di Eliminazione Rapida Match (Ultimi 2 record inseriti)")
+        
         if df_risultati.empty:
             st.info("Nessun match presente nel registro storicizzato.")
         else:
+            # Ordiniamo per ID decrescente per intercettare gli ultimi inseriti e isoliamo i primi 2 (.head(2))
             df_ultimi_record = df_risultati.sort_values(by="id", ascending=False).head(2)
+            
             h_col1, h_col2, h_col3, h_col4, h_col5, h_col6 = st.columns([1, 2, 3, 3, 1, 1])
             h_col1.markdown("**Tappa**")
             h_col2.markdown("**Season**")
@@ -371,19 +358,21 @@ elif menu == "📝 Inserisci Nuovi Dati":
                 r_col3.write(row['giocatore'])
                 r_col4.write(row['mazzo'])
                 r_col5.write(str(row['punteggio']))
+                
                 if r_col6.button("🗑️", key=f"del_match_{row['id']}"):
                     conn = sqlite3.connect(DB_FILE)
                     cursor = conn.cursor()
                     cursor.execute("DELETE FROM risultati WHERE id = ?", (int(row['id']),))
                     conn.commit()
                     conn.close()
-                    st.success(f"Match di {row['giocatore']} d'ufficio eliminato!")
+                    st.success(f"Match di {row['giocatore']} eliminato!")
                     st.rerun()
 
-    # --- TAB 2: GESTIONE GIOCATORI ---
+    # --- TAB 2: GESTIONE E TABELLA ELIMINAZIONE GIOCATORI ---
     with tab_gestione_player:
         st.header("👥 Anagrafica Giocatori")
         col_p_ins, col_p_mod = st.columns(2)
+        
         with col_p_ins:
             st.subheader("Aggiungi Nuovo Giocatore")
             nuovo_giocatore = st.text_input("Nome e Cognome", key="new_player").strip()
@@ -400,12 +389,14 @@ elif menu == "📝 Inserisci Nuovi Dati":
                     except sqlite3.IntegrityError:
                         st.error("Questo giocatore esiste già!")
                 else:
-                    st.error("Il nome del giocatore non puo' essere vuoto.")
+                    st.error("Il nome del giocatore non può essere vuoto.")
+                    
         with col_p_mod:
             st.subheader("Modifica Giocatore Esistente")
             if lista_giocatori:
                 player_da_modificare = st.selectbox("Seleziona Giocatore da modificare:", lista_giocatori, key="sel_player_mod")
                 nuovo_nome_player = st.text_input("Nuovo Nome e Cognome:", value=player_da_modificare)
+                
                 if st.button("Aggiorna Giocatore ✏️"):
                     if nuovo_nome_player.strip():
                         conn = sqlite3.connect(DB_FILE)
@@ -433,11 +424,14 @@ elif menu == "📝 Inserisci Nuovi Dati":
                     conn.close()
                     st.success(f"Giocatore '{row['nome']}' rimosso!")
                     st.rerun()
+        else:
+            st.info("Nessun giocatore registrato.")
 
-    # --- TAB 3: GESTIONE DECK ---
+    # --- TAB 3: GESTIONE E TABELLA ELIMINAZIONE DECK ---
     with tab_gestione_deck:
         st.header("🃏 Anagrafica Mazzi/Archetipi")
         col_d_ins, col_d_mod = st.columns(2)
+        
         with col_d_ins:
             st.subheader("Aggiungi Nuovo Archetipo")
             nuovo_mazzo = st.text_input("Nome Archetipo (es. Eldrazi Tron)", key="new_deck").strip()
@@ -454,12 +448,14 @@ elif menu == "📝 Inserisci Nuovi Dati":
                     except sqlite3.IntegrityError:
                         st.error("Questo mazzo esiste già!")
                 else:
-                    st.error("Il nome del mazzo non puo' essere vuoto.")
+                    st.error("Il nome del mazzo non può essere vuoto.")
+                    
         with col_d_mod:
             st.subheader("Modifica Archetipo Esistente")
             if lista_mazzi:
                 mazzo_da_modificare = st.selectbox("Seleziona Archetipo da modificare:", lista_mazzi, key="sel_deck_mod")
                 nuovo_nome_mazzo = st.text_input("Nuovo Nome Archetipo:", value=mazzo_da_modificare)
+                
                 if st.button("Aggiorna Archetipo ✏️"):
                     if nuovo_nome_mazzo.strip():
                         conn = sqlite3.connect(DB_FILE)
@@ -478,6 +474,7 @@ elif menu == "📝 Inserisci Nuovi Dati":
         if not df_mazzi_db.empty:
             mazzi_ordinati = df_mazzi_db.sort_values(by="nome")
             chunks = [mazzi_ordinati[i:i + 3] for i in range(0, len(mazzi_ordinati), 3)]
+            
             for chunk in chunks:
                 cols_deck = st.columns(3)
                 for i, (idx, row) in enumerate(chunk.iterrows()):
@@ -489,28 +486,37 @@ elif menu == "📝 Inserisci Nuovi Dati":
                             cursor = conn.cursor()
                             cursor.execute("DELETE FROM mazzi WHERE id = ?", (int(row['id']),))
                             conn.commit()
-                    conn.close()
-                    st.success(f"Mazzo '{row['nome']}' rimosso!")
-                    st.rerun()
+                            conn.close()
+                            st.success(f"Mazzo '{row['nome']}' rimosso!")
+                            st.rerun()
+        else:
+            st.info("Nessun mazzo registrato.")
 
     # --- GESTIONE FILES (BACKUP & RIPRISTINO) ---
     st.markdown("---")
     col_back1, col_back2 = st.columns(2)
+    
     with col_back1:
         st.subheader("💾 Backup del Database")
-        st.write("Scarica una copia di sicurezza di `lega_pauper.db`.")
+        st.write("Scarica una copia di sicurezza di `lega_pauper.db` con tutti i dati.")
         try:
             with open(DB_FILE, "rb") as file:
                 db_bytes = file.read()
-            st.download_button(label="Scarica Database (.db) 📥", data=db_bytes, file_name="lega_pauper_backup.db", mime="application/x-sqlite3", width="stretch")
+            st.download_button(
+                label="Scarica Database (.db) 📥",
+                data=db_bytes,
+                file_name="lega_pauper_backup.db",
+                mime="application/x-sqlite3"
+            )
         except FileNotFoundError:
             st.error("Il file del database non esiste ancora.")
+            
     with col_back2:
         st.subheader("🔄 Ripristina Database")
         st.write("Carica un file di backup per sovrascrivere i dati correnti.")
         uploaded_db = st.file_uploader("Scegli un file .db", type=["db"])
         if uploaded_db is not None:
-            if st.button("Conferma e Sovrascrivi ⚠️", type="primary", width="stretch"):
+            if st.button("Conferma e Sovrascrivi ⚠️", type="primary"):
                 try:
                     with open(DB_FILE, "wb") as f:
                         f.write(uploaded_db.read())
