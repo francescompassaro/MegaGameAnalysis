@@ -31,13 +31,13 @@ def init_db():
     conn.commit()
     conn.close()
 
-def inserisci_risultato(tappa, negozio, giocatore, mazzo, v, s, p, punti):
+def inserisci_risultato(anno, season, tappa, negozio, giocatore, mazzo, v, s, p, punti):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO risultati (tappa, negozio, giocatore, mazzo, vittorie, sconfitte, pareggi, punteggio)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (tappa, negozio, giocatore, mazzo, v, s, p, punti))
+        INSERT INTO risultati (anno, season, tappa, negozio, giocatore, mazzo, vittorie, sconfitte, pareggi, punteggio)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (anno, season, tappa, negozio, giocatore, mazzo, v, s, p, punti))
     conn.commit()
     conn.close()
 
@@ -97,7 +97,6 @@ if menu == "Dashboard Pubblica":
         st.subheader("🥇 Il Podio Attuale")
         col_p1, col_p2, col_p3 = st.columns(3)
         
-        # Gestione dinamica se ci sono meno di 3 giocatori nel DB
         if len(df_classifica_totale) >= 1:
             col_p1.metric(label="1° Posto 🥇", value=df_classifica_totale.iloc[0]["giocatore"], delta=f"{int(df_classifica_totale.iloc[0]['punteggio'])} PT")
         if len(df_classifica_totale) >= 2:
@@ -109,11 +108,10 @@ if menu == "Dashboard Pubblica":
 
         # --- RIGA 1: CLASSIFICA GENERALE VS METASHARE GLOBALE ---
         st.header("🌐 Panoramica Generale")
-        col_glob1, col_glob2 = st.columns([4, 3]) # Bilanciamo gli spazi (più largo a sinistra)
+        col_glob1, col_glob2 = st.columns([4, 3])
         
         with col_glob1:
             st.subheader("📋 Classifica Generale Completa")
-            # Mostriamo la classifica pulita come una tabella Excel nativa, super leggibile
             st.dataframe(
                 df_classifica_totale[['Pos', 'giocatore', 'punteggio']].rename(columns={'giocatore': 'Giocatore', 'punteggio': 'Punti Totali'}), 
                 use_container_width=True, 
@@ -140,12 +138,35 @@ if menu == "Dashboard Pubblica":
             
         st.markdown("---")
         
-        # --- SELETTORE TAPPA ---
-        tappe_disponibili = sorted(df_risultati["tappa"].unique())
+        # --- SELETTORE A CASCATA: ANNO -> SEASON -> TAPPA ---
         st.header("🎯 Dettaglio Singola Tappa")
-        tappa_scelta = st.selectbox("Seleziona la Tappa da visualizzare:", tappe_disponibili, index=len(tappe_disponibili)-1)
+        col_sel1, col_sel2, col_sel3 = st.columns(3)
         
-        df_tappa = df_risultati[df_risultati["tappa"] == tappa_scelta].sort_values(by="punteggio", ascending=False).reset_index(drop=True)
+        with col_sel1:
+            anni_disponibili = sorted(df_risultati["anno"].unique(), reverse=True)
+            anno_scelto = st.selectbox("Seleziona Anno:", anni_disponibili, index=0)
+            df_filtrato_anno = df_risultati[df_risultati["anno"] == anno_scelto]
+
+        with col_sel2:
+            season_disponibili = sorted(df_filtrato_anno["season"].unique())
+            season_scelta = st.selectbox("Seleziona Season:", season_disponibili, index=0)
+            df_filtrato_season = df_filtrato_anno[df_filtrato_anno["season"] == season_scelta]
+
+        with col_sel3:
+            tappe_disponibili = sorted(df_filtrato_season["tappa"].unique())
+            tappa_scelta = st.selectbox(
+                "Seleziona Tappa:", 
+                tappe_disponibili, 
+                index=len(tappe_disponibili)-1 if tappe_disponibili else 0
+            )
+        
+        # Filtro finale dei dati
+        df_tappa = df_risultati[
+            (df_risultati["anno"] == anno_scelto) & 
+            (df_risultati["season"] == season_scelta) & 
+            (df_risultati["tappa"] == tappa_scelta)
+        ].sort_values(by="punteggio", ascending=False).reset_index(drop=True)
+        
         df_tappa.index += 1
         df_tappa.index.name = "Pos Tappa"
         df_tappa = df_tappa.reset_index()
@@ -183,66 +204,28 @@ if menu == "Dashboard Pubblica":
         st.subheader("📋 Registro Storico di Tutti i Match Inseriti")
         df_visualizzazione = df_risultati[['tappa', 'negozio', 'giocatore', 'mazzo', 'vittorie', 'sconfitte', 'pareggi', 'punteggio']].copy()
         df_visualizzazione.columns = ['Tappa', 'Negozio', 'Giocatore', 'Mazzo Giocato', 'W', 'L', 'D', 'Punti']
-        
         st.dataframe(df_visualizzazione, use_container_width=True, hide_index=True)
-
 
 # --- 5. PAGINA: INSERIMENTO DATI (ADMIN) ---
 elif menu == "📝 Inserisci Nuovi Dati":
     st.header("📝 Pannello Inserimento Risultati")
     ELENCO_MAZZI = sorted([  
-        "Abzan En Kor",  
-        "Azorius Familiars",  
-        "Bogles",  
-        "Boros Gates",  
-        "Boros Synthesizer",  
-        "Boros Tribe",  
-        "Caw-Gate",  
-        "Dimir Faeries",  
-        "Dimir Terror",  
-        "Dimir Control",  
-        "Elves",  
-        "Flicker Tron",  
-        "Golgari Gardens",
-        "Bant Gardens",
-        "Grixis Affinity",  
-        "Gruul Monster",  
-        "Gruul Ponza",  
-        "Infect MonoGreen",
-        "Infect Simic",  
-        "Izzet Skred",  
-        "Jeskai Ephemerate",  
-        "Jund Evolution",  
-        "Jund Wildfire",  
-        "Kuldotha Burn",  
-        "Mardu Synthesis",  
-        "Monoblue Faeries",  
-        "Monoblue Terror",  
-        "Monored Madness",  
-        "Monored Rally",  
-        "Monowhite Heroic",  
-        "Monowhite Weenie",  
-        "Orzhov Blade",  
-        "Petitioners Mill",  
-        "Spy Combo",  
-        "Slivers",  
-        "Tortured Existence",  
-        "UG Turbofog",  
-        "Walls Combo",  
-        "WB Skyblade",
-        "Naya Gates",
-        "Monster Tron",
-        "Rakdos Madness"
-
-        ])
-
+        "Abzan En Kor", "Azorius Familiars", "Bogles", "Boros Gates", "Boros Synthesizer",  
+        "Boros Tribe", "Caw-Gate", "Dimir Faeries", "Dimir Terror", "Dimir Control",  
+        "Elves", "Flicker Tron", "Golgari Gardens", "Bant Gardens", "Grixis Affinity",  
+        "Gruul Monster", "Gruul Ponza", "Infect MonoGreen", "Infect Simic", "Izzet Skred",  
+        "Jeskai Ephemerate", "Jund Evolution", "Jund Wildfire", "Kuldotha Burn",  
+        "Mardu Synthesis", "Monoblue Faeries", "Monoblue Terror", "Monored Madness",  
+        "Monored Rally", "Monowhite Heroic", "Monowhite Weenie", "Orzhov Blade",  
+        "Petitioners Mill", "Spy Combo", "Slivers", "Tortured Existence",  
+        "UG Turbofog", "Walls Combo", "WB Skyblade", "Naya Gates", "Monster Tron", "Rakdos Madness"
+    ])
     ELENCO_NEGOZI = ["Magicomix"]
     
     with st.form("form_inserimento", clear_on_submit=True):
         col_f1, col_f2, col_f3 = st.columns(3)
         
         with col_f1:
-            # Nuovi campi obbligatori per il filtro temporale
             anno = st.selectbox("Anno della Season", [2026, 2027, 2025])
             season = st.selectbox("Nome Season", ["Stagione 1", "Stagione 2", "Stagione 3", "Winter", "Spring", "Summer", "Autumn"])
             tappa = st.number_input("Numero Tappa", min_value=1, max_value=50, value=1, step=1)
@@ -266,15 +249,40 @@ elif menu == "📝 Inserisci Nuovi Dati":
             if not giocatore.strip():
                 st.error("Il nome del giocatore non può essere vuoto!")
             else:
-                # Inseriamo anche anno e season nella query SQL
-                conn = sqlite3.connect(DB_FILE)
-                cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO risultati (anno, season, tappa, negozio, giocatore, mazzo, vittorie, sconfitte, pareggi, punteggio)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (anno, season, tappa, negozio, giocatore, mazzo, vittorie, sconfitte, pareggi, punti_totali))
-                conn.commit()
-                conn.close()
-                
+                inserisci_risultato(anno, season, tappa, negozio, giocatore, mazzo, vittorie, sconfitte, pareggi, punti_totali)
                 st.success(f"Dati inseriti con successo per {giocatore}!")
                 st.rerun()
+
+    # --- SEZIONE GESTIONE FILES (BACKUP & RIPRISTINO) - FUORI DAL FORM MA IN SEZIONE ADMIN ---
+    st.markdown("---")
+    col_back1, col_back2 = st.columns(2)
+    
+    with col_back1:
+        st.subheader("💾 Backup del Database")
+        st.write("Scarica una copia di sicurezza di `lega_pauper.db` con tutti i dati.")
+        try:
+            with open(DB_FILE, "rb") as file:
+                db_bytes = file.read()
+            st.download_button(
+                label="Scarica Database (.db) 📥",
+                data=db_bytes,
+                file_name="lega_pauper_backup.db",
+                mime="application/x-sqlite3"
+            )
+        except FileNotFoundError:
+            st.error("Il file del database non esiste ancora.")
+            
+    with col_back2:
+        st.subheader("🔄 Ripristina Database")
+        st.write("Carica un file di backup per sovrascrivere i dati correnti.")
+        uploaded_db = st.file_uploader("Scegli un file .db", type=["db"])
+        if uploaded_db is not None:
+            if st.button("Conferma e Sovrascrivi ⚠️", type="primary"):
+                try:
+                    with open(DB_FILE, "wb") as f:
+                        f.write(uploaded_db.read())
+                    st.success("Database ripristinato con successo!")
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Errore: {e}")
