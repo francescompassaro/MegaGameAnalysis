@@ -3,6 +3,7 @@ import pandas as pd
 import sqlite3
 import plotly.express as px
 import os
+from streamlit_option_menu import option_menu
 from pandas.api.types import (
     is_categorical_dtype,
     is_numeric_dtype,
@@ -50,7 +51,7 @@ def filter_dataframe(df: pd.DataFrame, key: str = "default") -> pd.DataFrame:
 st.set_page_config(page_title="Lega Pauper Capua", layout="wide", page_icon="🏆")
 
 DB_FILE = "/data/lega_pauper.db"
-PASSWORD_ADMIN = os.getenv("ADMIN_PASSWORD", "pauper_default")  # La tua password per inserire i dati
+PASSWORD_ADMIN = os.getenv("ADMIN_PASSWORD", "pauper_default")  # La tua password protetta per inserire i dati
 
 # 2. INIZIALIZZAZIONE DATABASE
 def init_db():
@@ -141,22 +142,17 @@ df_risultati = carica_dati("risultati")
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 
-# --- BARRA LATERALE ---
-st.sidebar.title("🎮 Lega Pauper Capua")
-
-# 1. Inizializziamo gli stati in modo che siano persistenti e slegati dai widget
-if "logged_in" not in st.session_state:
-    st.session_state["logged_in"] = False
-
 if "errore_login" not in st.session_state:
     st.session_state["errore_login"] = False
 
-# 2. Mostriamo i widget in base allo stato booleano puro
+# --- BARRA LATERALE ---
+st.sidebar.title("🎮 Lega Pauper Capua")
+
+# Accesso Amministratore basato sullo stato booleano puro
 if not st.session_state["logged_in"]:
     st.sidebar.subheader("🔒 Accesso Admin")
     
     with st.sidebar.form(key="form_login"):
-        # Rimuoviamo la proprietà 'key' dal widget per evitare che Streamlit la cancelli al cambio pagina
         password_input = st.text_input("Password", type="password")
         bottone_accedi = st.form_submit_button("Accedi")
         
@@ -165,7 +161,7 @@ if not st.session_state["logged_in"]:
                 st.session_state["logged_in"] = True
                 st.session_state["errore_login"] = False
                 st.toast("Accesso effettuato! 🎉")
-                st.rerun()  # Forza il ricaricamento immediato per mostrare il menu Admin
+                st.rerun()
             else:
                 st.session_state["errore_login"] = True
 
@@ -178,17 +174,30 @@ else:
         st.session_state["logged_in"] = False
         st.rerun()
 
-# 3. Menu di navigazione stabile
-opzioni_menu = ["Dashboard Pubblica", "🃏 Liste per Tappa"]
+# Configurazione del menu a schede visivo pulito (Senza emoji interne per evitare bug di routing delle stringhe)
+opzioni_menu = ["Dashboard Pubblica", "Liste per Tappa"]
+icone_menu = ["house", "journals"]
+
 if st.session_state["logged_in"]:
-    opzioni_menu.append("📝 Inserisci Nuovi Dati")
+    opzioni_menu.append("Inserisci Nuovi Dati")
+    icone_menu.append("pencil-square")
 
 st.sidebar.markdown("---")
-menu = st.sidebar.selectbox(
-    "📍 Vai alla sezione:", 
-    opzioni_menu,
-    index=0
-)
+
+with st.sidebar:
+    menu = option_menu(
+        menu_title="Navigazione",
+        options=opzioni_menu,
+        icons=icone_menu,
+        menu_icon="cast",
+        default_index=0,
+        styles={
+            "container": {"padding": "5px!", "background-color": "transparent"},
+            "icon": {"color": "#ff4b4b", "font-size": "16px"}, 
+            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px", "--hover-color": "#eee"},
+            "nav-link-selected": {"background-color": "#ff4b4b", "color": "white"},
+        }
+    )
 
 # --- 4. PAGINA: DASHBOARD PUBBLICA ---
 if menu == "Dashboard Pubblica":
@@ -309,7 +318,7 @@ if menu == "Dashboard Pubblica":
         st.dataframe(df_registro_filtrato, width="stretch", hide_index=True)
 
 # --- 5. PAGINA: LISTE PER TAPPA ---
-elif menu == "🃏 Liste per Tappa":
+elif menu == "Liste per Tappa":
     st.title("🃏 Archivio Liste Mazzi divisi per Tappa")
     st.write("Usa i selettori per scegliere l'evento e visualizzare tutti i mazzi che hanno preso parte alla tappa.")
     
@@ -361,7 +370,7 @@ elif menu == "🃏 Liste per Tappa":
                 st.markdown("<hr style='margin: 8px 0px; border-color: #f0f2f6;'>", unsafe_allow_html=True)
 
 # --- 6. PAGINA: INSERIMENTO DATI (ADMIN) ---
-elif menu == "📝 Inserisci Nuovi Dati":
+elif menu == "Inserisci Nuovi Dati":
     st.title("📝 Pannello Amministratore")
     
     df_risultati = carica_dati("risultati")
