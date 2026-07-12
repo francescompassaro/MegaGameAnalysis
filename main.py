@@ -48,7 +48,7 @@ def filter_dataframe(df: pd.DataFrame, key: str = "default") -> pd.DataFrame:
 # 1. IMPOSTAZIONI PAGINA
 st.set_page_config(page_title="Lega Pauper Capua", layout="wide", page_icon="🏆")
 
-DB_FILE = "lega_pauper.db"
+DB_FILE = "/data/lega_pauper.db"
 PASSWORD_ADMIN = "pauper2026"  # La tua password per inserire i dati
 
 # 2. INIZIALIZZAZIONE DATABASE
