@@ -144,46 +144,51 @@ if "logged_in" not in st.session_state:
 # --- BARRA LATERALE ---
 st.sidebar.title("🎮 Lega Pauper Capua")
 
-# Funzione di callback per gestire il login in modo atomico ed evitare i reset di stato
-def esegui_login():
-    if st.session_state["password_temporanea"] == PASSWORD_ADMIN:
-        st.session_state["logged_in"] = True
-        st.toast("Accesso effettuato! 🎉")
-    else:
-        st.session_state["errore_login"] = True
+# 1. Inizializziamo gli stati in modo che siano persistenti e slegati dai widget
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
 
-# Inizializzazione degli stati se non presenti
 if "errore_login" not in st.session_state:
     st.session_state["errore_login"] = False
 
+# 2. Mostriamo i widget in base allo stato booleano puro
 if not st.session_state["logged_in"]:
     st.sidebar.subheader("🔒 Accesso Admin")
     
-    # Il form cattura nativamente sia il tasto "Accedi" che l' "Invio" sulla tastiera
     with st.sidebar.form(key="form_login"):
-        password_input = st.text_input(
-            "Password", 
-            type="password", 
-            key="password_temporanea"
-        )
-        bottone_accedi = st.form_submit_button("Accedi", on_click=esegui_login)
-    
-    # Mostra l'errore solo se il flag è attivo, evitando i glitch di ricarica
+        # Rimuoviamo la proprietà 'key' dal widget per evitare che Streamlit la cancelli al cambio pagina
+        password_input = st.text_input("Password", type="password")
+        bottone_accedi = st.form_submit_button("Accedi")
+        
+        if bottone_accedi:
+            if password_input == PASSWORD_ADMIN:
+                st.session_state["logged_in"] = True
+                st.session_state["errore_login"] = False
+                st.toast("Accesso effettuato! 🎉")
+                st.rerun()  # Forza il ricaricamento immediato per mostrare il menu Admin
+            else:
+                st.session_state["errore_login"] = True
+
     if st.session_state["errore_login"]:
         st.sidebar.error("Password errata!")
-        st.session_state["errore_login"] = False # Reset immediato dell'avviso
+        st.session_state["errore_login"] = False
 else:
     st.sidebar.success("👨‍💻 Modalità Admin Attiva")
     if st.sidebar.button("Log Out"):
         st.session_state["logged_in"] = False
         st.rerun()
 
-# Il menu ora rimane stabile e persistente indipendentemente dai cambi pagina
+# 3. Menu di navigazione stabile
 opzioni_menu = ["Dashboard Pubblica", "🃏 Liste per Tappa"]
 if st.session_state["logged_in"]:
     opzioni_menu.append("📝 Inserisci Nuovi Dati")
 
-menu = st.sidebar.radio("Navigazione", opzioni_menu)
+st.sidebar.markdown("---")
+menu = st.sidebar.selectbox(
+    "📍 Vai alla sezione:", 
+    opzioni_menu,
+    index=0
+)
 
 # --- 4. PAGINA: DASHBOARD PUBBLICA ---
 if menu == "Dashboard Pubblica":
