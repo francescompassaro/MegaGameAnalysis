@@ -213,14 +213,14 @@ if menu == "Dashboard Pubblica":
             )
             fig_pie_glob.update_layout(
                 legend=dict(
-                    orientation="v",       # Legenda verticale
+                    orientation="v",
                     yanchor="top", 
                     y=1.0, 
                     xanchor="left", 
-                    x=1.02                 # Spostata sul lato destro fuori dalla torta
+                    x=1.02
                 ),
-                height=420,                # Altezza fissa ottimale per evitare tagli
-                margin=dict(t=20, b=20, l=10, r=10) # Margini interni ridotti
+                height=420,
+                margin=dict(t=20, b=20, l=10, r=10)
             )
             st.plotly_chart(fig_pie_glob, width="stretch")
             
@@ -256,9 +256,25 @@ if menu == "Dashboard Pubblica":
         with col_tappa2:
             st.subheader(f"🍩 Metashare - Tappa {tappa_scelta}")
             df_meta_tappa = df_tappa.groupby("mazzo").size().reset_index(name="Presenze")
-            fig_pie_tappa = px.pie(df_meta_tappa, names="mazzo", values="Presenze", hole=0.4, color_discrete_sequence=px.colors.qualitative.Safe)
-            fig_pie_tappa.update_layout(legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), height=350, margin=dict(t=10, b=10, l=10, r=10))
-            st.plotly_chart(fig_pie_tappa, use_container_width=True)
+            fig_pie_tappa = px.pie(
+                df_meta_tappa, 
+                names="mazzo", 
+                values="Presenze", 
+                hole=0.4, 
+                color_discrete_sequence=px.colors.qualitative.Safe
+            )
+            fig_pie_tappa.update_layout(
+                legend=dict(
+                    orientation="v",
+                    yanchor="top", 
+                    y=1.0, 
+                    xanchor="left", 
+                    x=1.02
+                ),
+                height=420,
+                margin=dict(t=20, b=20, l=10, r=10)
+            )
+            st.plotly_chart(fig_pie_tappa, width="stretch")
             
         st.markdown("---")
         
@@ -314,7 +330,6 @@ elif menu == "🃏 Liste per Tappa":
                 r_l2.write(row["giocatore"])
                 r_l3.write(row["mazzo"])
                 
-                # Resiste perfettamente sia alle stringhe vuote sia ad eventuali spazi spuri
                 if str(row["link_deck"]).strip() != "":
                     r_l4.link_button("Vedi Lista 🌐", row["link_deck"], width="stretch", type="secondary")
                 else:
