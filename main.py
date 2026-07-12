@@ -131,11 +131,26 @@ def carica_dati(tabella):
     colonne = [col[0] for col in cursor.description]
     conn.close()
     
-    df = pd.DataFrame(righe, columns=colonne)
+    # Se la tabella e vuota, creiamo un dataframe vuoto con le colonne corrette
+    if not righe:
+        return pd.DataFrame(columns=colonne)
     
-    if tabella == "risultati" and "link_deck" in df.columns:
-        df["link_deck"] = df["link_deck"].fillna("").astype(str)
-        
+    # Costruiamo un dizionario colonna per colonna per evitare che pandas 
+    # chiami pyarrow in blocco sulle tuple grezze
+    dati_mappati = {col: [] for col in colonne}
+    for riga in righe:
+        for i, valore in enumerate(riga):
+            dati_mappati[colonne[i]].append(valore)
+            
+    # Creiamo il dataframe passando il dizionario di liste native Python
+    df = pd.DataFrame(dati_mappati)
+    
+    # Convertiamo manualmente le colonne di testo per sicurezza usando il motore numpy
+    colonne_testo = ["giocatore", "mazzo", "season", "negozio", "link_deck"]
+    for col in colonne_testo:
+        if col in df.columns:
+            df[col] = df[col].fillna("").astype(str)
+            
     return df
 
 init_db()
