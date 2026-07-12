@@ -3,11 +3,6 @@ import pandas as pd
 import sqlite3
 import plotly.express as px
 import os
-from pandas.api.types import (
-    is_categorical_dtype,
-    is_numeric_dtype,
-    is_object_dtype,
-)
 
 def filter_dataframe(df: pd.DataFrame, key: str = "default") -> pd.DataFrame:
     """
@@ -23,14 +18,15 @@ def filter_dataframe(df: pd.DataFrame, key: str = "default") -> pd.DataFrame:
     
     for column in to_filter_columns:
         left, right = st.columns((1, 3))
-        if is_object_dtype(df[column]):
+        # Verifica esplicita del tipo per evitare l'uso di metodi deprecati o legati ad Arrow
+        if df[column].dtype == object or isinstance(df[column].dtype, pd.StringDtype):
             user_text_input = right.text_input(
                 f"Cerca nel testo di '{column}':",
                 key=f"filter_{column}_{key}",
             )
             if user_text_input:
                 df = df[df[column].astype(str).str.contains(user_text_input, case=False)]
-        elif is_numeric_dtype(df[column]):
+        elif pd.api.types.is_numeric_dtype(df[column]):
             min_val = int(df[column].min()) if not df[column].empty else 0
             max_val = int(df[column].max()) if not df[column].empty else 0
             if min_val == max_val:
@@ -56,6 +52,7 @@ PASSWORD_ADMIN = os.getenv("ADMIN_PASSWORD", "pauper_default")
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    
     # Tabella Risultati Match
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS risultati (
@@ -86,6 +83,7 @@ def init_db():
             nome TEXT UNIQUE
         )
     """)
+    
     # Tabella Mazzi/Archetipi
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS mazzi (
@@ -124,6 +122,10 @@ def inserisci_risultato(anno, season, tappa, negozio, giocatore, mazzo, v, s, p,
     conn.close()
 
 def carica_dati(tabella):
+    """
+    Estrae i dati in modo atomico convertendoli immediatamente in strutture
+    native Python per inibire i motori di inferenza C++ di PyArrow ed eliminare i Segmentation Fault.
+    """
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute(f"SELECT * FROM {tabella}")
@@ -131,28 +133,26 @@ def carica_dati(tabella):
     colonne = [col[0] for col in cursor.description]
     conn.close()
     
-    # Se la tabella e vuota, creiamo un dataframe vuoto con le colonne corrette
     if not righe:
         return pd.DataFrame(columns=colonne)
     
-    # Costruiamo un dizionario colonna per colonna per evitare che pandas 
-    # chiami pyarrow in blocco sulle tuple grezze
+    # Mappatura esplicita in liste per evitare elaborazioni vettoriali massive instabili
     dati_mappati = {col: [] for col in colonne}
     for riga in righe:
         for i, valore in enumerate(riga):
             dati_mappati[colonne[i]].append(valore)
             
-    # Creiamo il dataframe passando il dizionario di liste native Python
     df = pd.DataFrame(dati_mappati)
     
-    # Convertiamo manualmente le colonne di testo per sicurezza usando il motore numpy
-    colonne_testo = ["giocatore", "mazzo", "season", "negozio", "link_deck"]
+    # Cast manuale preventivo delle colonne testuali usando tipi primitivi di base
+    colonne_testo = ["giocatore", "mazzo", "season", "negozio", "link_deck", "nome"]
     for col in colonne_testo:
         if col in df.columns:
             df[col] = df[col].fillna("").astype(str)
             
     return df
 
+# Esecuzione controllata dei moduli di avvio database
 init_db()
 df_risultati = carica_dati("risultati")
 
@@ -167,6 +167,7 @@ if "pagina_attiva" not in st.session_state:
     st.session_state["pagina_attiva"] = "Dashboard Pubblica"
 
 def processo_autenticazione():
+    """Mantiene lo stato isolato garantendo la persistenza della sessione durante il cambio pagina"""
     if st.session_state["campo_password_admin"] == PASSWORD_ADMIN:
         st.session_state["logged_in"] = True
         st.session_state["errore_login"] = False
@@ -179,7 +180,6 @@ st.sidebar.title("Lega Pauper Capua")
 
 if not st.session_state["logged_in"]:
     st.sidebar.subheader("Accesso Admin")
-    
     with st.sidebar.form(key="form_login"):
         password_input = st.text_input("Password", type="password", key="campo_password_admin")
         bottone_accedi = st.form_submit_button("Accedi", on_click=processo_autenticazione)
@@ -197,6 +197,7 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.subheader("Navigazione")
 
+# Generazione dei controlli di navigazione stabili con bottoni grafici nativi
 if st.sidebar.button("Dashboard Pubblica", use_container_width=True, type="secondary" if st.session_state["pagina_attiva"] != "Dashboard Pubblica" else "primary"):
     st.session_state["pagina_attiva"] = "Dashboard Pubblica"
     st.rerun()
@@ -219,6 +220,7 @@ if menu == "Dashboard Pubblica":
     if df_risultati.empty:
         st.info("Nessun dato presente nel database. Accedi come admin nella barra laterale per inserire i risultati della prima tappa!")
     else:
+        # Aggregazione punteggi classifica generale
         df_classifica_totale = df_risultati.groupby("giocatore")["punteggio"].sum().reset_index()
         df_classifica_totale = df_classifica_totale.sort_values(by="punteggio", ascending=False).reset_index(drop=True)
         df_classifica_totale.index += 1
@@ -367,15 +369,16 @@ elif menu == "Liste per Tappa":
                 st.markdown("<hr style='margin: 8px 0px; border-color: #f0f2f6;'>", unsafe_allow_html=True)
 
 # --- 6. PAGINA: INSERIMENTO DATI (ADMIN) ---
-elif menu == "Inserisci Nuovi Dati":
+elif menu == "Inserisci Nuovi Dati" and st.session_state["logged_in"]:
     st.title("Pannello Amministratore")
     
+    # Ricaricamento sicuro dell'anagrafica
     df_risultati = carica_dati("risultati")
     df_giocatori_db = carica_dati("giocatori")
     df_mazzi_db = carica_dati("mazzi")
     
-    lista_giocatori = sorted(df_giocatori_db["nome"].tolist())
-    lista_mazzi = sorted(df_mazzi_db["nome"].tolist())
+    lista_giocatori = sorted(df_giocatori_db["nome"].tolist()) if not df_giocatori_db.empty else []
+    lista_mazzi = sorted(df_mazzi_db["nome"].tolist()) if not df_mazzi_db.empty else []
     
     tab_risultati, tab_gestione_player, tab_gestione_deck = st.tabs([
         "Inserisci Punti Tappa", "Gestione Giocatori", "Gestione Mazzi/Archetipi"
@@ -410,6 +413,7 @@ elif menu == "Inserisci Nuovi Dati":
             if st.button("Salva nel Database", key="save_match_btn"):
                 inserisci_risultato(anno, season, tappa, negozio, giocatore, mazzo, vittorie, sconfitte, pareggi, punti_totali, link_deck_input.strip())
                 st.success(f"Dati inseriti con successo per {giocatore}!")
+                st.cache_data.clear()
                 st.rerun()
                 
         st.markdown("---")
@@ -439,7 +443,8 @@ elif menu == "Inserisci Nuovi Dati":
                     cursor.execute("DELETE FROM risultati WHERE id = ?", (int(row['id']),))
                     conn.commit()
                     conn.close()
-                    st.success(f"Match di {row['giocatore']} d'ufficio eliminato!")
+                    st.success(f"Match di {row['giocatore']} eliminato!")
+                    st.cache_data.clear()
                     st.rerun()
 
     # --- TAB 2: GESTIONE GIOCATORI ---
@@ -458,6 +463,7 @@ elif menu == "Inserisci Nuovi Dati":
                         conn.commit()
                         conn.close()
                         st.success(f"{nuovo_giocatore} aggiunto!")
+                        st.cache_data.clear()
                         st.rerun()
                     except sqlite3.IntegrityError:
                         st.error("Questo giocatore esiste gia!")
@@ -477,6 +483,7 @@ elif menu == "Inserisci Nuovi Dati":
                         conn.commit()
                         conn.close()
                         st.success("Aggiornato con successo!")
+                        st.cache_data.clear()
                         st.rerun()
             else:
                 st.info("Nessun giocatore registrato.")
@@ -494,6 +501,7 @@ elif menu == "Inserisci Nuovi Dati":
                     conn.commit()
                     conn.close()
                     st.success(f"Giocatore '{row['nome']}' rimosso!")
+                    st.cache_data.clear()
                     st.rerun()
 
     # --- TAB 3: GESTIONE DECK ---
@@ -502,7 +510,7 @@ elif menu == "Inserisci Nuovi Dati":
         col_d_ins, col_d_mod = st.columns(2)
         with col_d_ins:
             st.subheader("Aggiungi Nuovo Archetipo")
-            nuovo_mazzo = st.text_input("Nome Archetipo (es. Eldrazi Tron)", key="new_deck").strip()
+            nuovo_mazzo = st.text_input("Nome Archetipo", key="new_deck").strip()
             if st.button("Salva Mazzo"):
                 if nuovo_mazzo:
                     try:
@@ -512,6 +520,7 @@ elif menu == "Inserisci Nuovi Dati":
                         conn.commit()
                         conn.close()
                         st.success(f"Archetipo '{nuovo_mazzo}' salvato!")
+                        st.cache_data.clear()
                         st.rerun()
                     except sqlite3.IntegrityError:
                         st.error("Questo mazzo esiste gia!")
@@ -531,6 +540,7 @@ elif menu == "Inserisci Nuovi Dati":
                         conn.commit()
                         conn.close()
                         st.success("Archetipo aggiornato!")
+                        st.cache_data.clear()
                         st.rerun()
             else:
                 st.info("Nessun mazzo configurato.")
@@ -553,6 +563,7 @@ elif menu == "Inserisci Nuovi Dati":
                             conn.commit()
                             conn.close()
                             st.success(f"Mazzo '{row['nome']}' rimosso!")
+                            st.cache_data.clear()
                             st.rerun()
 
     # --- GESTIONE FILES (BACKUP & RIPRISTINO) ---
@@ -581,3 +592,6 @@ elif menu == "Inserisci Nuovi Dati":
                     st.rerun()
                 except Exception as e:
                     st.error(f"Errore: {e}")
+else:
+    # Se un utente non autorizzato forza l'URL o la sessione decade, viene reindirizzato alla Home pubblica
+    st.session_state["pagina_attiva"] = "Dashboard Pubblica"
