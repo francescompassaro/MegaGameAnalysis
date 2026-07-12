@@ -47,7 +47,7 @@ def filter_dataframe(df: pd.DataFrame, key: str = "default") -> pd.DataFrame:
     return df
 
 # 1. IMPOSTAZIONI PAGINA
-st.set_page_config(page_title="Lega Pauper Capua", layout="wide", page_icon="🏆")
+st.set_page_config(page_title="Lega Pauper Capua", layout="wide")
 
 DB_FILE = "/data/lega_pauper.db"
 PASSWORD_ADMIN = os.getenv("ADMIN_PASSWORD", "pauper_default")
@@ -151,7 +151,6 @@ if "errore_login" not in st.session_state:
 if "pagina_attiva" not in st.session_state:
     st.session_state["pagina_attiva"] = "Dashboard Pubblica"
 
-# Funzione atomica per gestire il login in isolamento completo dai cicli dei widget
 def processo_autenticazione():
     if st.session_state["campo_password_admin"] == PASSWORD_ADMIN:
         st.session_state["logged_in"] = True
@@ -163,7 +162,6 @@ def processo_autenticazione():
 # --- BARRA LATERALE ---
 st.sidebar.title("Lega Pauper Capua")
 
-# Accesso Amministratore basato su callback on_click per blindare la persistenza della sessione
 if not st.session_state["logged_in"]:
     st.sidebar.subheader("Accesso Admin")
     
@@ -184,7 +182,6 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.subheader("Navigazione")
 
-# Elenco verticale nativo a pulsanti per le sezioni dell'applicazione
 if st.sidebar.button("Dashboard Pubblica", use_container_width=True, type="secondary" if st.session_state["pagina_attiva"] != "Dashboard Pubblica" else "primary"):
     st.session_state["pagina_attiva"] = "Dashboard Pubblica"
     st.rerun()
@@ -432,7 +429,7 @@ elif menu == "Inserisci Nuovi Dati":
 
     # --- TAB 2: GESTIONE GIOCATORI ---
     with tab_gestione_player:
-        st.header("Anagrafica Giocatori")
+        st.header("Gestione Giocatori")
         col_p_ins, col_p_mod = st.columns(2)
         with col_p_ins:
             st.subheader("Aggiungi Nuovo Giocatore")
