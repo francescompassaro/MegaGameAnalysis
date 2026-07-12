@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import plotly.express as px
+import os
 from pandas.api.types import (
     is_categorical_dtype,
     is_numeric_dtype,
@@ -49,7 +50,7 @@ def filter_dataframe(df: pd.DataFrame, key: str = "default") -> pd.DataFrame:
 st.set_page_config(page_title="Lega Pauper Capua", layout="wide", page_icon="🏆")
 
 DB_FILE = "/data/lega_pauper.db"
-PASSWORD_ADMIN = "pauper2026"  # La tua password per inserire i dati
+PASSWORD_ADMIN = os.getenv("ADMIN_PASSWORD", "pauper_default")  # La tua password per inserire i dati
 
 # 2. INIZIALIZZAZIONE DATABASE
 def init_db():
@@ -143,23 +144,41 @@ if "logged_in" not in st.session_state:
 # --- BARRA LATERALE ---
 st.sidebar.title("🎮 Lega Pauper Capua")
 
+# Funzione di callback per gestire il login in modo atomico ed evitare i reset di stato
+def esegui_login():
+    if st.session_state["password_temporanea"] == PASSWORD_ADMIN:
+        st.session_state["logged_in"] = True
+        st.toast("Accesso effettuato! 🎉")
+    else:
+        st.session_state["errore_login"] = True
+
+# Inizializzazione degli stati se non presenti
+if "errore_login" not in st.session_state:
+    st.session_state["errore_login"] = False
+
 if not st.session_state["logged_in"]:
     st.sidebar.subheader("🔒 Accesso Admin")
-    password_input = st.sidebar.text_input("Password", type="password")
-    if st.sidebar.button("Accedi"):
-        if password_input == PASSWORD_ADMIN:
-            st.session_state["logged_in"] = True
-            st.sidebar.success("Accesso effettuato!")
-            st.rerun()
-        else:
-            st.sidebar.error("Password errata!")
+    
+    # Il form cattura nativamente sia il tasto "Accedi" che l' "Invio" sulla tastiera
+    with st.sidebar.form(key="form_login"):
+        password_input = st.text_input(
+            "Password", 
+            type="password", 
+            key="password_temporanea"
+        )
+        bottone_accedi = st.form_submit_button("Accedi", on_click=esegui_login)
+    
+    # Mostra l'errore solo se il flag è attivo, evitando i glitch di ricarica
+    if st.session_state["errore_login"]:
+        st.sidebar.error("Password errata!")
+        st.session_state["errore_login"] = False # Reset immediato dell'avviso
 else:
     st.sidebar.success("👨‍💻 Modalità Admin Attiva")
     if st.sidebar.button("Log Out"):
         st.session_state["logged_in"] = False
         st.rerun()
 
-# AGGIUNTA PAGINA "Liste per Tappa" AL MENU
+# Il menu ora rimane stabile e persistente indipendentemente dai cambi pagina
 opzioni_menu = ["Dashboard Pubblica", "🃏 Liste per Tappa"]
 if st.session_state["logged_in"]:
     opzioni_menu.append("📝 Inserisci Nuovi Dati")
