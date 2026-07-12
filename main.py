@@ -125,8 +125,13 @@ def inserisci_risultato(anno, season, tappa, negozio, giocatore, mazzo, v, s, p,
 
 def carica_dati(tabella):
     conn = sqlite3.connect(DB_FILE)
-    df = pd.read_sql_query(f"SELECT * FROM {tabella}", conn)
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT * FROM {tabella}")
+    righe = cursor.fetchall()
+    colonne = [col[0] for col in cursor.description]
     conn.close()
+    
+    df = pd.DataFrame(righe, columns=colonne)
     
     if tabella == "risultati" and "link_deck" in df.columns:
         df["link_deck"] = df["link_deck"].fillna("").astype(str)
@@ -146,25 +151,25 @@ if "errore_login" not in st.session_state:
 if "pagina_attiva" not in st.session_state:
     st.session_state["pagina_attiva"] = "Dashboard Pubblica"
 
+# Funzione atomica per gestire il login in isolamento completo dai cicli dei widget
+def processo_autenticazione():
+    if st.session_state["campo_password_admin"] == PASSWORD_ADMIN:
+        st.session_state["logged_in"] = True
+        st.session_state["errore_login"] = False
+        st.toast("Accesso effettuato!")
+    else:
+        st.session_state["errore_login"] = True
+
 # --- BARRA LATERALE ---
 st.sidebar.title("Lega Pauper Capua")
 
-# Accesso Amministratore
+# Accesso Amministratore basato su callback on_click per blindare la persistenza della sessione
 if not st.session_state["logged_in"]:
     st.sidebar.subheader("Accesso Admin")
     
     with st.sidebar.form(key="form_login"):
-        password_input = st.text_input("Password", type="password")
-        bottone_accedi = st.form_submit_button("Accedi")
-        
-        if bottone_accedi:
-            if password_input == PASSWORD_ADMIN:
-                st.session_state["logged_in"] = True
-                st.session_state["errore_login"] = False
-                st.toast("Accesso effettuato!")
-                st.rerun()
-            else:
-                st.session_state["errore_login"] = True
+        password_input = st.text_input("Password", type="password", key="campo_password_admin")
+        bottone_accedi = st.form_submit_button("Accedi", on_click=processo_autenticazione)
 
     if st.session_state["errore_login"]:
         st.sidebar.error("Password errata!")
@@ -179,7 +184,7 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.subheader("Navigazione")
 
-# Elenco verticale di pagine cliccabili stabili e pulite
+# Elenco verticale nativo a pulsanti per le sezioni dell'applicazione
 if st.sidebar.button("Dashboard Pubblica", use_container_width=True, type="secondary" if st.session_state["pagina_attiva"] != "Dashboard Pubblica" else "primary"):
     st.session_state["pagina_attiva"] = "Dashboard Pubblica"
     st.rerun()
@@ -202,14 +207,12 @@ if menu == "Dashboard Pubblica":
     if df_risultati.empty:
         st.info("Nessun dato presente nel database. Accedi come admin nella barra laterale per inserire i risultati della prima tappa!")
     else:
-        # --- ELABORAZIONE DATI CLASSIFICA ---
         df_classifica_totale = df_risultati.groupby("giocatore")["punteggio"].sum().reset_index()
         df_classifica_totale = df_classifica_totale.sort_values(by="punteggio", ascending=False).reset_index(drop=True)
         df_classifica_totale.index += 1
         df_classifica_totale.index.name = "Pos"
         df_classifica_totale = df_classifica_totale.reset_index()
 
-        # --- SEZIONE PODIO ---
         st.subheader("Il Podio Attuale")
         col_p1, col_p2, col_p3 = st.columns(3)
         if len(df_classifica_totale) >= 1:
@@ -221,7 +224,6 @@ if menu == "Dashboard Pubblica":
             
         st.markdown("---")
 
-        # --- CLASSIFICA GENERALE VS METASHARE GLOBALE ---
         st.header("Panoramica Generale")
         col_glob1, col_glob2 = st.columns([4, 3])
         with col_glob1:
@@ -241,13 +243,7 @@ if menu == "Dashboard Pubblica":
                 color_discrete_sequence=px.colors.qualitative.Pastel
             )
             fig_pie_glob.update_layout(
-                legend=dict(
-                    orientation="v",
-                    yanchor="top", 
-                    y=1.0, 
-                    xanchor="left", 
-                    x=1.02
-                ),
+                legend=dict(orientation="v", yanchor="top", y=1.0, xanchor="left", x=1.02),
                 height=420,
                 margin=dict(t=20, b=20, l=10, r=10)
             )
@@ -255,7 +251,6 @@ if menu == "Dashboard Pubblica":
             
         st.markdown("---")
         
-        # --- SELETTORE A CASCATA TAPPA ---
         st.header("Dettaglio Singola Tappa")
         col_sel1, col_sel2, col_sel3 = st.columns(3)
         with col_sel1:
@@ -293,13 +288,7 @@ if menu == "Dashboard Pubblica":
                 color_discrete_sequence=px.colors.qualitative.Safe
             )
             fig_pie_tappa.update_layout(
-                legend=dict(
-                    orientation="v",
-                    yanchor="top", 
-                    y=1.0, 
-                    xanchor="left", 
-                    x=1.02
-                ),
+                legend=dict(orientation="v", yanchor="top", y=1.0, xanchor="left", x=1.02),
                 height=420,
                 margin=dict(t=20, b=20, l=10, r=10)
             )
@@ -385,7 +374,7 @@ elif menu == "Inserisci Nuovi Dati":
         ELENCO_NEGOZI = ["Magicomix"]
         
         if not lista_giocatori or not lista_mazzi:
-            st.warning("Per favor, inserisci almeno un giocatore e un mazzo nei Tab a fianco prima di registrare un match!")
+            st.warning("Per favore, inserisci almeno un giocatore e un mazzo nei Tab a fianco prima di registrare un match!")
         else:
             col_f1, col_f2, col_f3 = st.columns(3)
             with col_f1:
