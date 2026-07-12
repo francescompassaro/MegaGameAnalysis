@@ -204,9 +204,25 @@ if menu == "Dashboard Pubblica":
         with col_glob2:
             st.subheader("🍩 Metashare Globale (Mazzi Giocati)")
             df_meta_glob = df_risultati.groupby("mazzo").size().reset_index(name="Presenze")
-            fig_pie_glob = px.pie(df_meta_glob, names="mazzo", values="Presenze", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-            fig_pie_glob.update_layout(legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5), height=350, margin=dict(t=10, b=10, l=10, r=10))
-            st.plotly_chart(fig_pie_glob, use_container_width=True)
+            fig_pie_glob = px.pie(
+                df_meta_glob, 
+                names="mazzo", 
+                values="Presenze", 
+                hole=0.4,
+                color_discrete_sequence=px.colors.qualitative.Pastel
+            )
+            fig_pie_glob.update_layout(
+                legend=dict(
+                    orientation="v",       # Legenda verticale
+                    yanchor="top", 
+                    y=1.0, 
+                    xanchor="left", 
+                    x=1.02                 # Spostata sul lato destro fuori dalla torta
+                ),
+                height=420,                # Altezza fissa ottimale per evitare tagli
+                margin=dict(t=20, b=20, l=10, r=10) # Margini interni ridotti
+            )
+            st.plotly_chart(fig_pie_glob, width="stretch")
             
         st.markdown("---")
         
