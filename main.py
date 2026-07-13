@@ -364,9 +364,13 @@ elif menu == "Inserisci Nuovi Dati" and st.session_state["sessione_admin_attiva"
                 pareggi = st.number_input("Pareggi (D)", min_value=0, max_value=10, value=0, step=1)
                 
             link_deck_input = st.text_input("Link della lista mazzo (MTGDecks / Moxfield / ecc.) - Opzionale", placeholder="https://mtgdecks.net/Pauper/...")
-            
+
             punti_totali = (vittorie * 4) + (pareggi * 1) + 2
-            st.markdown(f"**Calcolo Punteggio:** `{punti_totali} Punti` (4 per Win, 1 per Draw e 2 punti presenza)")
+            # Se il giocatore fa punteggio pieno con 4 vittorie, si aggiunge il bonus extra di 4 punti
+            if vittorie == 4:
+                punti_totali += 4
+                
+            st.markdown(f"**Calcolo Punteggio:** `{punti_totali} Punti` (4 per W, 1 per D, +2 Presenza, +4 Extra se fai 4 W)")
             
             if st.button("Salva nel Database", key="save_match_btn"):
                 inserisci_risultato(anno, season, tappa, negozio, giocatore, mazzo, vittorie, sconfitte, pareggi, punti_totali, link_deck_input.strip())
