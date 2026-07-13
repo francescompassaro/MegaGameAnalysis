@@ -80,8 +80,8 @@ with tab_risultati:
             
         link_deck_input = st.text_input("Link della lista mazzo (MTGDecks / Moxfield / ecc.) - Opzionale", placeholder="https://mtgdecks.net/Pauper/...")
         
-        punti_totali = (vittorie * 3) + (pareggi * 1)
-        st.markdown(f"**Calcolo Punteggio:** `{punti_totali} Punti` (3 per W, 1 per D)")
+        punti_totali = (vittorie * 4) + (pareggi * 1) + 2
+        st.markdown(f"**Calcolo Punteggio:** `{punti_totali} Punti` (3 per W, 1 per D e 2 di presenza)")
         
         if st.button("Salva nel Database", key="save_match_btn"):
             inserisci_risultato(anno, season, tappa, negozio, giocatore, mazzo, vittorie, sconfitte, pareggi, punti_totali, link_deck_input.strip())
