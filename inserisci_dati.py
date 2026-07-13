@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 
-# Blocco di sicurezza e controllo autorizzazioni
-if not st.session_state.get("logged_in", False):
+# Controllo basato sulla nuova variabile di stato indipendente
+if not st.session_state.get("autenticato", False):
     st.warning("Accesso negato. Autenticati nella barra laterale.")
     st.stop()
 
