@@ -40,9 +40,13 @@ def carica_dati(tabella):
     if not righe:
         return pd.DataFrame(columns=colonne)
     
+    # Costruzione atomica per evitare elaborazioni vettoriali C++ instabili
     dati_mappati = {col: [] for col in colonne}
     for riga in righe:
         for i, valore in enumerate(riga):
+            # Forza la pulizia immediata delle stringhe o elementi nulli
+            if valore is None:
+                valore = ""
             dati_mappati[colonne[i]].append(valore)
             
     df = pd.DataFrame(dati_mappati)
@@ -50,7 +54,7 @@ def carica_dati(tabella):
     colonne_testo = ["giocatore", "mazzo", "season", "negozio", "link_deck"]
     for col in colonne_testo:
         if col in df.columns:
-            df[col] = df[col].fillna("").astype(str)
+            df[col] = df[col].astype(str)
             
     return df
 
