@@ -1,21 +1,19 @@
 import streamlit as st
 import os
 
-# Impostazioni globali della pagina: definite una sola volta nel file di ingresso
+# 1. IMPOSTAZIONI GLOBALI E PERSISTENZA STATO (Eseguiti prima di tutto)
 st.set_page_config(page_title="Lega Pauper Capua", layout="wide")
 
-DB_FILE = "/data/lega_pauper.db"
-PASSWORD_ADMIN = os.getenv("ADMIN_PASSWORD", "pauper_default")
-
-# Inizializzazione controllata degli stati di sessione
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 
 if "errore_login" not in st.session_state:
     st.session_state["errore_login"] = False
 
+PASSWORD_ADMIN = os.getenv("ADMIN_PASSWORD", "pauper_default")
+
 def processo_autenticazione():
-    """Valida le credenziali e blinda lo stato in memoria prima del cambio pagina"""
+    """Valida le credenziali e fissa lo stato in memoria prima del ciclo di navigazione"""
     if st.session_state["campo_password_admin"] == PASSWORD_ADMIN:
         st.session_state["logged_in"] = True
         st.session_state["errore_login"] = False
@@ -23,7 +21,7 @@ def processo_autenticazione():
     else:
         st.session_state["errore_login"] = True
 
-# --- BARRA LATERALE E FORM DI LOGIN ---
+# --- INTERFACCIA BARRA LATERALE ---
 st.sidebar.title("Lega Pauper Capua")
 
 if not st.session_state["logged_in"]:
@@ -43,17 +41,15 @@ else:
 
 st.sidebar.markdown("---")
 
-# --- DEFINIZIONE STRUTTURA DELLE PAGINE NATIVE ---
+# --- MOTORE DI NAVIGAZIONE MULTIPAGINA ---
 page_dashboard = st.Page("dashboard.py", title="Dashboard Pubblica", default=True)
 page_liste = st.Page("liste.py", title="Liste per Tappa")
 page_admin = st.Page("inserisci_dati.py", title="Inserisci Nuovi Dati")
 
-# Routing dinamico delle sezioni
 pagine_disponibili = [page_dashboard, page_liste]
 
 if st.session_state["logged_in"]:
     pagine_disponibili.append(page_admin)
 
-# Generazione nativa della lista di navigazione testuale nella sidebar
 pg = st.navigation(pagine_disponibili)
 pg.run()
